@@ -104,9 +104,9 @@ func (p *Ping) tcping(ip *net.IPAddr) (bool, time.Duration) {
 }
 
 // pingReceived pingTotalTime
-func (p *Ping) checkConnection(ip *net.IPAddr) (recv int, totalDelay time.Duration) {
+func (p *Ping) checkConnection(ip *net.IPAddr) (recv int, totalDelay time.Duration, colo string) {
 	if Httping {
-		recv, totalDelay = p.httping(ip)
+		recv, totalDelay, colo = p.httping(ip)
 		return
 	}
 	for i := 0; i < PingTimes; i++ {
@@ -118,17 +118,18 @@ func (p *Ping) checkConnection(ip *net.IPAddr) (recv int, totalDelay time.Durati
 	return
 }
 
-func (p *Ping) appendIPData(data *utils.PingData) {
+func (p *Ping) appendIPData(data *utils.PingData, colo string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 	p.csv = append(p.csv, utils.CloudflareIPData{
 		PingData: data,
+		Colo:          colo,
 	})
 }
 
 // handle tcping
 func (p *Ping) tcpingHandler(ip *net.IPAddr) {
-	recv, totalDlay := p.checkConnection(ip)
+	recv, totalDlay, colo := p.checkConnection(ip)
 	nowAble := len(p.csv)
 	if recv != 0 {
 		nowAble++
@@ -143,5 +144,5 @@ func (p *Ping) tcpingHandler(ip *net.IPAddr) {
 		Received: recv,
 		Delay:    totalDlay / time.Duration(recv),
 	}
-	p.appendIPData(data)
+	p.appendIPData(data, colo) // 传递colo
 }

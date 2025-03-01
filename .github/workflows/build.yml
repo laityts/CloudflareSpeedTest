@@ -1,0 +1,76 @@
+name: Multi-Arch Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如 v2.2.5)'
+        required: true
+        default: 'v2.2.5'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: linux
+            arch: arm
+            arm_version: 7
+          - os: windows
+            arch: amd64
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build
+        run: |
+          OUTPUT_NAME="cfst-${{ github.event.inputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          LDFLAGS="-s -w -X main.version=${{ github.event.inputs.version }}"
+
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            OUTPUT_NAME="$OUTPUT_NAME.exe"
+          fi
+
+          if [ "${{ matrix.arch }}" = "arm" ]; then
+            export GOARM=${{ matrix.arm_version }}
+            OUTPUT_NAME="cfst-${{ github.event.inputs.version }}-${{ matrix.os }}-armv${{ matrix.arm_version }}"
+          fi
+
+          # 关键修改：使用项目根目录构建（或指定正确子目录）
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
+          CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "bin/$OUTPUT_NAME" .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cfst-${{ matrix.os }}-${{ matrix.arch }}
+          path: bin/
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-cfst
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: cfst-${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
+          files: ./release-cfst/**/*
